@@ -28,6 +28,7 @@ _w = WorkspaceClient()
 
 TABLE_NAME = os.environ.get("MASSIVE_TABLE_NAME", "massive_records")
 WATCHLIST_TABLE_NAME = os.environ.get("WATCHLIST_TABLE_NAME", "watchlist")
+NEWS_TABLE_NAME = os.environ.get("NEWS_TABLE_NAME", "ticker_news")
 
 # Basic stock ticker shape check: 1-10 uppercase letters, with an optional
 # ".X" or ".XX" share-class suffix (e.g. "BRK.B"). This rejects obviously
@@ -63,6 +64,24 @@ def ensure_watchlist_table():
     )
 
 
+def ensure_news_table():
+    """Create the ticker_news table in Lakebase if it doesn't exist yet."""
+    lakebase.run_write(
+        f"""
+        CREATE TABLE IF NOT EXISTS {NEWS_TABLE_NAME} (
+            id TEXT PRIMARY KEY,
+            symbol TEXT NOT NULL,
+            title TEXT,
+            url TEXT,
+            source TEXT,
+            published_at TIMESTAMPTZ,
+            description TEXT,
+            fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+        """
+    )
+
+
 def _current_user_email() -> str:
     """
     Resolve the current user's email so the watchlist can be personalized.
@@ -75,6 +94,59 @@ def _current_user_email() -> str:
     if header_email:
         return header_email
     return _w.current_user.me().user_name
+
+
+@app.route("/news/<symbol>", methods=["POST"])
+def fetch_ticker_news(symbol: str):
+    """Pull recent news for a ticker from the Massive API and store it in Lakebase."""
+    symbol = symbol.strip().upper()
+    if not symbol or not _TICKER_RE.match(symbol):
+        return jsonify({"error": f"Invalid ticker symbol: {symbol!r}"}), 400
+
+    ensure_news_table()
+    client = MassiveClient()
+    try:
+        articles = client.get_ticker_news(symbol, limit=10)
+    except requests.HTTPError:
+        return jsonify({"error": f"Failed to fetch news for ticker: {symbol}"}), 400
+
+    stored = 0
+    with lakebase.get_connection() as conn:
+        with conn.cursor() as cur:
+            for a in articles:
+                if not a.get("id"):
+                    continue
+                cur.execute(
+                    f"""
+                    INSERT INTO {NEWS_TABLE_NAME} (id, symbol, title, url, source, published_at, description, fetched_at)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, now())
+                    ON CONFLICT (id) DO UPDATE
+                        SET title = EXCLUDED.title,
+                            url = EXCLUDED.url,
+                            source = EXCLUDED.source,
+                            published_at = EXCLUDED.published_at,
+                            description = EXCLUDED.description,
+                            fetched_at = EXCLUDED.fetched_at
+                    """,
+                    (a["id"], symbol, a["title"], a["url"], a["source"], a["published_utc"], a["description"]),
+                )
+                stored += 1
+            conn.commit()
+
+    return jsonify({"symbol": symbol, "articles_stored": stored})
+
+
+@app.route("/news/<symbol>", methods=["GET"])
+def get_ticker_news(symbol: str):
+    """Return stored news articles for a ticker from Lakebase."""
+    symbol = symbol.strip().upper()
+    ensure_news_table()
+    rows = lakebase.run_query(
+        f"SELECT id, symbol, title, url, source, published_at, description, fetched_at "
+        f"FROM {NEWS_TABLE_NAME} WHERE symbol = %s ORDER BY published_at DESC NULLS LAST LIMIT 10",
+        (symbol,),
+    )
+    return jsonify(rows)
 
 
 @app.route("/healthz")
@@ -147,6 +219,31 @@ def get_watchlist():
         (email,),
     )
     return jsonify(rows)
+
+
+@app.route("/watchlist", methods=["DELETE"])
+def remove_from_watchlist():
+    """Remove a symbol from the current user's watchlist."""
+    ensure_watchlist_table()
+
+    if request.is_json:
+        symbol = request.json.get("symbol", "")
+    else:
+        symbol = request.form.get("symbol", "")
+
+    symbol = symbol.strip().upper() if isinstance(symbol, str) else ""
+
+    if not symbol or not _TICKER_RE.match(symbol):
+        return jsonify({"error": f"Invalid ticker symbol: {symbol!r}"}), 400
+
+    email = _current_user_email()
+
+    lakebase.run_write(
+        f"DELETE FROM {WATCHLIST_TABLE_NAME} WHERE symbol = %s AND email = %s",
+        (symbol, email),
+    )
+
+    return jsonify({"symbol": symbol, "email": email, "removed": True})
 
 
 @app.route("/watchlist", methods=["POST"])

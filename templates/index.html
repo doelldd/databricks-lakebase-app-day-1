@@ -2,22 +2,300 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Massive Stock Watchlist</title>
   <style>
-    body { font-family: -apple-system, Arial, sans-serif; max-width: 560px; margin: 60px auto; color: #222; }
-    h1 { font-size: 20px; }
-    label { display: block; margin-top: 16px; font-weight: 600; }
-    input[type="text"] { width: 100%; padding: 8px; margin-top: 6px; box-sizing: border-box; }
-    button { margin-top: 16px; padding: 8px 16px; cursor: pointer; }
-    #result { margin-top: 20px; white-space: pre-wrap; background: #f6f6f6; padding: 12px; border-radius: 6px; min-height: 20px; }
-    .hint { color: #777; font-size: 13px; margin-top: 4px; }
-    table { width: 100%; margin-top: 24px; border-collapse: collapse; }
-    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #ddd; }
-    th { font-size: 13px; color: #555; text-transform: uppercase; }
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --accent: #3b82f6;
+      --accent-hover: #2563eb;
+      --accent-light: rgba(59, 130, 246, 0.1);
+      --success: #22c55e;
+      --error: #ef4444;
+      --radius: 12px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+      max-width: 680px;
+      margin: 0 auto;
+      padding: 48px 24px;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.6;
+    }
+
+    h1 {
+      font-size: 28px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin: 0 0 8px 0;
+    }
+
+    .hint {
+      color: var(--text-muted);
+      font-size: 14px;
+      margin: 0 0 32px 0;
+    }
+
+    form {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 24px;
+    }
+
+    label {
+      display: block;
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 16px;
+      background: #0f172a;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 16px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    input[type="text"]::placeholder { color: var(--text-muted); }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-light);
+    }
+
+    button {
+      margin-top: 20px;
+      padding: 12px 24px;
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+    }
+
+    button:hover { background: var(--accent-hover); }
+    button:active { transform: scale(0.97); }
+
+    #result {
+      margin-top: 20px;
+      padding: 14px 18px;
+      border-radius: 8px;
+      font-size: 14px;
+      min-height: 20px;
+    }
+
+    #result:empty { display: none; }
+
+    #result.success {
+      background: rgba(34, 197, 94, 0.12);
+      border: 1px solid rgba(34, 197, 94, 0.3);
+      color: var(--success);
+    }
+
+    #result.error {
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: var(--error);
+    }
+
+    #result.loading {
+      background: var(--accent-light);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: var(--accent);
+    }
+
+    table {
+      width: 100%;
+      margin-top: 32px;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    th, td {
+      text-align: left;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    th {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      background: #0f172a;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+
+    tbody tr { transition: background 0.15s; }
+    tbody tr:hover { background: rgba(59, 130, 246, 0.06); }
+
+    td { font-size: 14px; }
+    td:nth-child(3) { font-variant-numeric: tabular-nums; font-weight: 600; }
+
+    .action-btns {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn-delete, .btn-news {
+      padding: 8px 16px;
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .btn-news {
+      background: var(--accent);
+      border: none;
+      color: #fff;
+    }
+
+    .btn-news:hover { 
+      background: var(--accent-hover);
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    }
+    
+    .btn-news:active { 
+      transform: scale(0.96);
+      box-shadow: 0 1px 4px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-delete {
+      background: transparent;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: var(--error);
+    }
+
+    .btn-delete:hover { 
+      background: rgba(239, 68, 68, 0.12);
+      border-color: var(--error);
+    }
+    
+    .btn-delete:active { 
+      transform: scale(0.96);
+      background: rgba(239, 68, 68, 0.2);
+    }
+
+    #news-panel {
+      display: none;
+      margin-top: 32px;
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+
+    #news-panel.visible { display: block; }
+
+    #news-panel .news-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      background: #0f172a;
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    #news-panel .news-header h2 {
+      margin: 0;
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    #news-panel .news-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 22px;
+      cursor: pointer;
+      padding: 0 4px;
+      margin: 0;
+      line-height: 1;
+    }
+
+    #news-panel .news-close:hover { color: var(--text); }
+
+    .news-article {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--card-border);
+      transition: background 0.15s;
+    }
+
+    .news-article:last-child { border-bottom: none; }
+    .news-article:hover { background: rgba(59, 130, 246, 0.04); }
+
+    .news-article a {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .news-article a:hover { text-decoration: underline; }
+
+    .news-article .news-meta {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .news-article .news-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+
+    .news-loading {
+      padding: 24px 20px;
+      text-align: center;
+      color: var(--accent);
+      font-size: 14px;
+    }
+
+    .news-empty {
+      padding: 24px 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    #watchlist-table { display: none; }
+    #watchlist-table.has-data { display: table; }
   </style>
 </head>
 <body>
-  <h1>Stock Watchlist</h1>
+  <h1>📈 Stock Watchlist</h1>
   <p class="hint">Enter a single ticker symbol. This sends exactly ONE call to the Massive API to fetch the latest price, then adds it to your watchlist.</p>
 
   <form id="stock-form">
@@ -28,6 +306,14 @@
 
   <div id="result"></div>
 
+  <div id="news-panel">
+    <div class="news-header">
+      <h2 id="news-title">News</h2>
+      <button class="news-close" id="news-close">&times;</button>
+    </div>
+    <div id="news-body"></div>
+  </div>
+
   <table id="watchlist-table">
     <thead>
       <tr>
@@ -35,6 +321,7 @@
         <th>Email</th>
         <th>Latest price</th>
         <th>Updated</th>
+        <th>Action</th>
       </tr>
     </thead>
     <tbody id="watchlist-body"></tbody>
@@ -44,15 +331,18 @@
     const form = document.getElementById("stock-form");
     const resultEl = document.getElementById("result");
     const watchlistBody = document.getElementById("watchlist-body");
+    const tableEl = document.getElementById("watchlist-table");
 
     async function loadWatchlist() {
       try {
         const resp = await fetch("/watchlist");
         const data = await resp.json();
         if (!resp.ok) {
+          resultEl.className = "error";
           resultEl.textContent = "Error loading watchlist: " + (data.error || resp.statusText);
           return;
         }
+        if (data.length > 0) { tableEl.classList.add("has-data"); } else { tableEl.classList.remove("has-data"); }
         watchlistBody.innerHTML = "";
         data.forEach((row) => {
           const tr = document.createElement("tr");
@@ -60,17 +350,89 @@
             ? Number(row.latest_price).toFixed(2)
             : "-";
           const updated = row.updated_at ? new Date(row.updated_at).toLocaleString() : "-";
-          tr.innerHTML = `<td>${row.symbol}</td><td>${row.email || "-"}</td><td>${price}</td><td>${updated}</td>`;
+          tr.innerHTML = `<td>${row.symbol}</td><td>${row.email || "-"}</td><td>${price}</td><td>${updated}</td><td><div class="action-btns"><button class="btn-news" data-symbol="${row.symbol}">📰 News</button><button class="btn-delete" data-symbol="${row.symbol}">Remove</button></div></td>`;
           watchlistBody.appendChild(tr);
         });
       } catch (err) {
+        resultEl.className = "error";
         resultEl.textContent = "Failed to load watchlist: " + err;
+      }
+    }
+
+    async function removeSymbol(symbol) {
+      resultEl.className = "loading";
+      resultEl.textContent = "Removing " + symbol + "...";
+      try {
+        const resp = await fetch("/watchlist", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ symbol }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          resultEl.className = "error";
+          resultEl.textContent = "Error: " + (data.error || resp.statusText);
+          return;
+        }
+        resultEl.className = "success";
+        resultEl.textContent = "\u2705 Removed " + data.symbol;
+        loadWatchlist();
+      } catch (err) {
+        resultEl.className = "error";
+        resultEl.textContent = "\u274c Request failed: " + err;
+      }
+    }
+
+    watchlistBody.addEventListener("click", (e) => {
+      if (e.target.classList.contains("btn-delete")) {
+        removeSymbol(e.target.dataset.symbol);
+      }
+      if (e.target.classList.contains("btn-news")) {
+        openNews(e.target.dataset.symbol);
+      }
+    });
+
+    const newsPanel = document.getElementById("news-panel");
+    const newsTitle = document.getElementById("news-title");
+    const newsBody = document.getElementById("news-body");
+    document.getElementById("news-close").addEventListener("click", () => {
+      newsPanel.classList.remove("visible");
+    });
+
+    async function openNews(symbol) {
+      newsTitle.textContent = "News for " + symbol;
+      newsBody.innerHTML = "<div class=\"news-loading\">Fetching news...</div>";
+      newsPanel.classList.add("visible");
+
+      try {
+        const postResp = await fetch("/news/" + symbol, { method: "POST" });
+        const postData = await postResp.json();
+        if (!postResp.ok) {
+          newsBody.innerHTML = "<div class=\"news-empty\">Error: " + (postData.error || postResp.statusText) + "</div>";
+          return;
+        }
+
+        const getResp = await fetch("/news/" + symbol);
+        const articles = await getResp.json();
+        if (!getResp.ok || articles.length === 0) {
+          newsBody.innerHTML = "<div class=\"news-empty\">No news articles found for " + symbol + "</div>";
+          return;
+        }
+
+        newsBody.innerHTML = articles.map(a => {
+          const date = a.published_at ? new Date(a.published_at).toLocaleString() : "-";
+          const source = a.source ? " &middot; " + a.source : "";
+          return `<div class="news-article"><a href="${a.url}" target="_blank">${a.title}</a><div class="news-meta">${date}${source}</div>${a.description ? "<div class=\"news-desc\">" + a.description + "</div>" : ""}</div>`;
+        }).join("");
+      } catch (err) {
+        newsBody.innerHTML = "<div class=\"news-empty\">Failed to load news: " + err + "</div>";
       }
     }
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
       const symbol = document.getElementById("symbol").value;
+      resultEl.className = "loading";
       resultEl.textContent = "Adding to watchlist...";
 
       try {
@@ -81,14 +443,17 @@
         });
         const data = await resp.json();
         if (!resp.ok) {
+          resultEl.className = "error";
           resultEl.textContent = "Error: " + (data.error || resp.statusText);
           return;
         }
-        resultEl.textContent = "Added " + data.symbol + " at price " + data.latest_price;
+        resultEl.className = "success";
+        resultEl.textContent = "\u2705 Added " + data.symbol + " at price " + data.latest_price;
         document.getElementById("symbol").value = "";
         loadWatchlist();
       } catch (err) {
-        resultEl.textContent = "Request failed: " + err;
+        resultEl.className = "error";
+        resultEl.textContent = "\u274c Request failed: " + err;
       }
     });
 

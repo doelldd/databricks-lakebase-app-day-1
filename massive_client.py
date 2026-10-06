@@ -85,3 +85,30 @@ class MassiveClient:
         """
         data = self.get(f"/v2/aggs/ticker/{symbol}/prev")
         return data
+
+    def get_ticker_news(self, symbol: str, limit: int = 10) -> list[dict]:
+        """
+        Fetch recent news articles for a single ticker symbol.
+
+        Calls /v2/reference/news?ticker={symbol} which returns a list of
+        articles, each with an id, title, article_url, publisher name,
+        published_utc timestamp, and description.  The 'limit' parameter
+        caps the number of articles requested from the API.
+
+        Returns a normalised list of dicts so the caller doesn't have to
+        know the raw API shape:
+            [{"id", "title", "url", "source", "published_utc", "description"}]
+        """
+        data = self.get("/v2/reference/news", params={"ticker": symbol, "limit": limit})
+        results = []
+        if isinstance(data, dict):
+            for r in data.get("results", []):
+                results.append({
+                    "id": r.get("id"),
+                    "title": r.get("title", ""),
+                    "url": r.get("article_url", ""),
+                    "source": (r.get("publisher") or {}).get("name", ""),
+                    "published_utc": r.get("published_utc", ""),
+                    "description": r.get("description", ""),
+                })
+        return results
